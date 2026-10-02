@@ -1,0 +1,1 @@
+{"scripts":{"dev":"vite --host 0.0.0.0","build":"vite build","preview":"vite preview --host 0.0.0.0"},"dependencies":{"leaflet":"^1.9.4","react":"^19.1.1","react-dom":"^19.1.1","react-leaflet":"^5.0.0","lucide-react":"^0.468.0"},"devDependencies":{"@vitejs/plugin-react":"^5.0.0","typescript":"^5.8.3","vite":"^6.3.5"},"version":"1.0.0","private":true,"name":"geoagentic-copilot"}
