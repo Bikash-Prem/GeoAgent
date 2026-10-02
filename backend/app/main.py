@@ -10,6 +10,10 @@ from sqlalchemy import select
 from app.core.config import settings
 from app.db.session import Base, engine, SessionLocal
 from app.models.entities import Vehicle, Incident, Telemetry
+from app.models import intelligence as intelligence_models
+from app.models.intelligence import Mission
+from app.services.situation import SituationEngine
+from app.services.trajectory import TrajectoryEngine
 from app.api.routes import router
 
 def seed_database():
@@ -25,6 +29,8 @@ def seed_database():
               Incident(id='INC-204',kind='accident',severity='high',title='Accident on Main St.',lat=12.9731,lon=77.5997,radius_m=220,details='Multi-vehicle collision; lane closure reported.'),
               Incident(id='INC-205',kind='closure',severity='medium',title='Road closure · 06:00–10:00',lat=12.9718,lon=77.6012,radius_m=150,details='Temporary lane closure.'),
               Incident(id='INC-206',kind='traffic',severity='medium',title='Heavy traffic corridor',lat=12.9705,lon=77.5988,radius_m=350,details='Average speed down 68% from baseline.')])
+        if db.scalar(select(Mission).limit(1)) is None:
+            db.add(Mission(id='MIS-204', vehicle_id='AMB-07', emergency_type='critical_patient', priority=1, destination='City General Hospital', status='active'))
         db.commit()
 
 @asynccontextmanager
@@ -75,12 +81,10 @@ async def telemetry(ws:WebSocket):
             lat += 0.00004; lon += 0.00007
             payload={'type':'telemetry','vehicle_id':'AMB-07','lat':lat,'lon':lon,'speed_kmh':round(48+random.random()*18,1),'heading':72,'timestamp':datetime.utcnow().isoformat()}
             with SessionLocal() as db:
-                db.add(Telemetry(vehicle_id='AMB-07',lat=lat,lon=lon,speed_kmh=payload['speed_kmh'],heading=72))
-                vehicle = db.get(Vehicle, 'AMB-07')
-                if vehicle:
-                    vehicle.lat, vehicle.lon, vehicle.speed_kmh, vehicle.updated_at = lat, lon, payload['speed_kmh'], datetime.utcnow()
-                db.commit()
+                TrajectoryEngine().ingest(db, 'AMB-07', lat, lon, payload['speed_kmh'], 72)
+                situation = SituationEngine(db).build('AMB-07').as_dict()
             await manager.broadcast(payload)
+            await manager.broadcast({'type':'SITUATION_STATE_UPDATED','vehicle_id':'AMB-07','situation':situation})
             await asyncio.sleep(2)
     except WebSocketDisconnect: manager.disconnect(ws)
     except Exception: manager.disconnect(ws)

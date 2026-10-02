@@ -19,7 +19,9 @@ class RoadGraph:
         self.adj.setdefault(b, []).append(Edge(a, weight, risk))
     def heuristic(self, a, b):
         x,y=self.pos[a]; u,v=self.pos[b]; return hypot(x-u,y-v)*100000
-    def astar(self, start, goal, blocked=set(), penalty=0.0):
+    def astar(self, start, goal, blocked=None, penalty=0.0, blocked_edges=None):
+        blocked = blocked or set()
+        blocked_edges = blocked_edges or set()
         pq=[(0.0,start)]; g={start:0.0}; parent={}
         while pq:
             _,u=heappop(pq)
@@ -29,6 +31,7 @@ class RoadGraph:
                 return path[::-1],g[goal]
             for e in self.adj.get(u,[]):
                 if e.to in blocked: continue
+                if (u, e.to) in blocked_edges: continue
                 ng=g[u]+e.weight+penalty*e.risk
                 if ng<g.get(e.to,float('inf')):
                     g[e.to]=ng; parent[e.to]=u
