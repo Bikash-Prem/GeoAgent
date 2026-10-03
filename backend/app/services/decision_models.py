@@ -105,6 +105,7 @@ class ActionEvaluation:
     confidence: float
     evidence_ids: list[str]
     route_id: str | None = None
+    backup_vehicle_id: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -112,6 +113,7 @@ class ActionEvaluation:
             "action": self.action_type,
             "vehicle_id": self.vehicle_id,
             "route_id": self.route_id,
+            "backup_vehicle_id": self.backup_vehicle_id,
             "expected_eta_minutes": round(self.eta.value, 2),
             "eta_uncertainty": {"lower": round(self.eta.lower, 2), "upper": round(self.eta.upper, 2), "confidence": round(self.eta.confidence, 3)},
             "risk": {"level": self.risk_level, "score": round(self.risk_score, 3)},
@@ -149,6 +151,6 @@ class DecisionResult:
             "reasoning": self.reason,
             "requires_human_approval": True,
             "created_at": datetime.utcnow().isoformat(),
-            "model_versions": {"eta": self.recommendation.eta.model_name + "-" + self.recommendation.eta.model_version, "policy": self.policy_version},
+            "model_versions": {"eta": "heuristic-1.1", "policy": self.policy_version},
             "situation": self.situation.as_dict(),
         }

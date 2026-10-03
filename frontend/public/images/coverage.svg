@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 450" role="img" aria-label="Map grid showing areas reachable by available ambulances">
+  <rect width="600" height="450" fill="#fbf9f2"/>
+  <g stroke="#f7f3e8" stroke-width="4">
+    <g fill="#6a9a63"><rect x="40" y="40" width="74" height="74"/><rect x="114" y="40" width="74" height="74"/><rect x="40" y="114" width="74" height="74"/><rect x="114" y="114" width="74" height="74"/><rect x="188" y="114" width="74" height="74"/><rect x="114" y="188" width="74" height="74"/><rect x="336" y="188" width="74" height="74"/><rect x="410" y="188" width="74" height="74"/><rect x="410" y="262" width="74" height="74"/><rect x="484" y="262" width="74" height="74"/><rect x="410" y="336" width="74" height="74"/></g>
+    <g fill="#a9c99c"><rect x="188" y="40" width="74" height="74"/><rect x="40" y="188" width="74" height="74"/><rect x="188" y="188" width="74" height="74"/><rect x="262" y="188" width="74" height="74"/><rect x="336" y="262" width="74" height="74"/><rect x="484" y="188" width="74" height="74"/><rect x="484" y="336" width="74" height="74"/><rect x="336" y="336" width="74" height="74"/><rect x="114" y="262" width="74" height="74"/></g>
+    <g fill="#e3efd6"><rect x="262" y="40" width="74" height="74"/><rect x="262" y="114" width="74" height="74"/><rect x="336" y="114" width="74" height="74"/><rect x="40" y="262" width="74" height="74"/><rect x="188" y="262" width="74" height="74"/><rect x="262" y="262" width="74" height="74"/><rect x="262" y="336" width="74" height="74"/></g>
+    <g fill="#f3d4cf"><rect x="336" y="40" width="74" height="74"/><rect x="410" y="40" width="74" height="74"/><rect x="484" y="40" width="74" height="74"/><rect x="410" y="114" width="74" height="74"/><rect x="484" y="114" width="74" height="74"/><rect x="40" y="336" width="74" height="74"/><rect x="114" y="336" width="74" height="74"/><rect x="188" y="336" width="74" height="74"/></g>
+  </g>
+  <path d="M60 420 C 160 300, 260 260, 300 220 S 470 120, 560 60" stroke="#1c0f0e" stroke-width="5" fill="none" opacity=".35"/>
+  <circle cx="151" cy="151" r="120" fill="none" stroke="#1c0f0e" stroke-width="2.5" stroke-dasharray="8 8"/>
+  <circle cx="447" cy="299" r="120" fill="none" stroke="#1c0f0e" stroke-width="2.5" stroke-dasharray="8 8"/>
+  <g><circle cx="151" cy="151" r="22" fill="#1c0f0e"/><circle cx="151" cy="151" r="9" fill="#f0d34a"/></g>
+  <g><circle cx="447" cy="299" r="22" fill="#1c0f0e"/><circle cx="447" cy="299" r="9" fill="#f0d34a"/></g>
+  <g transform="translate(430 70)"><path d="M14 0 a14 14 0 0 1 14 14 c0 12 -14 28 -14 28 s-14 -16 -14 -28 a14 14 0 0 1 14 -14z" fill="#b65e5a"/><circle cx="14" cy="14" r="5" fill="#fbf9f2"/></g>
+</svg>

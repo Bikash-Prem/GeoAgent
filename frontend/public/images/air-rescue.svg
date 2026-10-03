@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 450" role="img" aria-label="Rescue helicopter flying over snow-capped mountains">
+  <rect width="600" height="450" fill="#f7f3e8"/>
+  <circle cx="470" cy="110" r="54" fill="#f0d34a" opacity=".85"/>
+  <path d="M0 300 L90 190 L150 250 L240 130 L330 240 L400 170 L500 260 L600 200 L600 450 L0 450Z" fill="#c5c096"/>
+  <path d="M240 130 L270 168 L255 162 L242 176 L228 160 L214 168Z" fill="#fbf9f2"/>
+  <path d="M400 170 L425 200 L410 196 L398 208 L386 196 L376 200Z" fill="#fbf9f2"/>
+  <path d="M0 360 L110 250 L200 330 L300 220 L380 310 L470 240 L600 330 L600 450 L0 450Z" fill="#6a9a63"/>
+  <path d="M300 220 L330 254 L314 250 L300 262 L288 250 L272 254Z" fill="#e3efd6"/>
+  <path d="M0 410 L120 330 L230 400 L330 340 L450 410 L540 360 L600 390 L600 450 L0 450Z" fill="#3a2a27"/>
+  <ellipse cx="170" cy="372" rx="38" ry="9" fill="#f7f3e8" opacity=".9"/>
+  <text x="170" y="377" text-anchor="middle" font-family="Outfit, sans-serif" font-weight="800" font-size="14" fill="#b65e5a">H</text>
+  <path d="M190 360 C 250 300, 300 230, 360 170" stroke="#1c0f0e" stroke-width="3" stroke-dasharray="8 9" fill="none" stroke-linecap="round"/>
+  <g transform="translate(360 150) rotate(-12)">
+    <rect x="-70" y="-6" width="140" height="5" rx="2.5" fill="#1c0f0e"/>
+    <rect x="-3" y="-6" width="6" height="16" fill="#1c0f0e"/>
+    <path d="M-44 10 h70 a26 22 0 0 1 0 44 h-58 a16 16 0 0 1 -16 -16 z" fill="#b65e5a"/>
+    <path d="M20 16 h8 a20 18 0 0 1 16 22 h-24z" fill="#fbf9f2"/>
+    <path d="M-44 26 L-104 20 L-104 30 L-44 38Z" fill="#b65e5a"/>
+    <rect x="-112" y="10" width="8" height="26" rx="3" fill="#1c0f0e"/>
+    <rect x="-20" y="26" width="18" height="6" fill="#fbf9f2"/><rect x="-14" y="20" width="6" height="18" fill="#fbf9f2"/>
+    <path d="M-30 60 v8 M14 60 v8 M-40 68 h66" stroke="#1c0f0e" stroke-width="4" stroke-linecap="round"/>
+  </g>
+</svg>

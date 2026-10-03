@@ -1,1 +1,1 @@
-"""External provider adapters with deterministic fallback implementations."""
+"""External provider adapters (Google Routes, Mapbox, TomTom, Traccar) with explicit fallbacks."""

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 450" role="img" aria-label="City road with traffic lights turned green for an ambulance">
+  <rect width="600" height="450" fill="#f7f3e8"/>
+  <g fill="#c5c096"><rect x="20" y="120" width="70" height="170" rx="6"/><rect x="100" y="80" width="60" height="210" rx="6"/><rect x="440" y="100" width="64" height="190" rx="6"/><rect x="514" y="60" width="66" height="230" rx="6"/></g>
+  <g fill="#fbf9f2" opacity=".8"><rect x="34" y="140" width="14" height="14"/><rect x="60" y="140" width="14" height="14"/><rect x="34" y="170" width="14" height="14"/><rect x="114" y="100" width="12" height="14"/><rect x="134" y="100" width="12" height="14"/><rect x="456" y="120" width="14" height="14"/><rect x="530" y="80" width="14" height="14"/><rect x="552" y="80" width="14" height="14"/></g>
+  <path d="M240 290 L360 290 L600 450 L0 450Z" fill="#3a2a27"/>
+  <path d="M290 290 L310 290 L380 450 L220 450Z" fill="#6a9a63" opacity=".55"/>
+  <g stroke="#f0d34a" stroke-width="5" stroke-dasharray="20 18"><line x1="300" y1="292" x2="300" y2="450"/></g>
+  <rect x="0" y="282" width="600" height="10" fill="#1c0f0e"/>
+  <g>
+    <rect x="186" y="150" width="6" height="140" fill="#1c0f0e"/>
+    <rect x="170" y="110" width="38" height="92" rx="10" fill="#1c0f0e"/>
+    <circle cx="189" cy="130" r="10" fill="#5a3a36"/><circle cx="189" cy="156" r="10" fill="#5a3a36"/><circle cx="189" cy="182" r="11" fill="#7ee08a"/>
+    <circle cx="189" cy="182" r="20" fill="#7ee08a" opacity=".25"/>
+  </g>
+  <g>
+    <rect x="408" y="150" width="6" height="140" fill="#1c0f0e"/>
+    <rect x="392" y="110" width="38" height="92" rx="10" fill="#1c0f0e"/>
+    <circle cx="411" cy="130" r="10" fill="#5a3a36"/><circle cx="411" cy="156" r="10" fill="#5a3a36"/><circle cx="411" cy="182" r="11" fill="#7ee08a"/>
+    <circle cx="411" cy="182" r="20" fill="#7ee08a" opacity=".25"/>
+  </g>
+  <g transform="translate(250 360)">
+    <path d="M0 0 h100 v52 h-100z" fill="#fbf9f2" stroke="#1c0f0e" stroke-width="3" rx="6"/>
+    <rect x="10" y="8" width="80" height="16" rx="4" fill="#67a6c2"/>
+    <rect x="0" y="32" width="100" height="7" fill="#b65e5a"/>
+    <rect x="20" y="-10" width="22" height="10" rx="3" fill="#b65e5a"/><rect x="58" y="-10" width="22" height="10" rx="3" fill="#67a6c2"/>
+    <rect x="-4" y="52" width="16" height="18" rx="3" fill="#1c0f0e"/><rect x="88" y="52" width="16" height="18" rx="3" fill="#1c0f0e"/>
+  </g>
+</svg>

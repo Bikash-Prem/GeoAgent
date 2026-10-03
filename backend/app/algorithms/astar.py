@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from heapq import heappush, heappop
-from math import hypot
+from math import cos, hypot, radians
 
 @dataclass(frozen=True)
 class Edge:
@@ -12,17 +12,24 @@ class RoadGraph:
     def __init__(self):
         self.adj: dict[str, list[Edge]] = {}
         self.pos: dict[str, tuple[float,float]] = {}
+        # Heuristic = straight-line metres * h_scale. It MUST be a lower bound of the true edge cost
+        # (A* is only optimal for admissible heuristics). 0.0 => plain Dijkstra, which is always correct.
+        self.h_scale: float = 0.0
     def add_node(self, node, lat, lon):
         self.pos[node] = (lat, lon); self.adj.setdefault(node, [])
     def add_edge(self, a, b, weight, risk=0.0):
         self.adj.setdefault(a, []).append(Edge(b, weight, risk))
         self.adj.setdefault(b, []).append(Edge(a, weight, risk))
     def heuristic(self, a, b):
-        # Edge weights are arbitrary operational costs (not meters), so a
-        # geographic-distance heuristic cannot be proven admissible. Returning
-        # zero preserves optimality while the real-road production path uses a
-        # routing provider rather than this demo graph.
-        return 0.0
+        if not self.h_scale: return 0.0
+        (x,y),(u,v)=self.pos[a],self.pos[b]
+        return hypot((x-u)*111320,(y-v)*111320*cos(radians((x+u)/2)))*self.h_scale
+    def edge(self, a, b):
+        return next((e for e in self.adj.get(a,[]) if e.to==b), None)
+    def path_cost(self, path):
+        return sum(self.edge(a,b).weight for a,b in zip(path,path[1:]))
+    def nearest_node(self, lat, lon):
+        return min(self.pos, key=lambda n:(self.pos[n][0]-lat)**2+(self.pos[n][1]-lon)**2)
     def astar(self, start, goal, blocked=None, penalty=0.0, blocked_edges=None):
         blocked = blocked or set()
         blocked_edges = blocked_edges or set()

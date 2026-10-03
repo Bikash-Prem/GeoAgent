@@ -4,6 +4,7 @@ from math import hypot
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.algorithms.geometry import DEVIATION_THRESHOLD_M, point_to_polyline_m
 from app.models.entities import Telemetry, Vehicle
 from app.models.intelligence import TrajectoryRecord
 
@@ -21,9 +22,10 @@ class TrajectoryEngine:
             raise ValueError("vehicle not found")
         previous = db.scalars(select(TrajectoryRecord).where(TrajectoryRecord.vehicle_id == vehicle_id).order_by(TrajectoryRecord.timestamp.desc()).limit(1)).first()
         planned_route = planned_route or [{"lat": vehicle.lat, "lon": vehicle.lon}, {"lat": 12.972, "lon": 77.607}]
-        nearest = min((distance_m(latitude, longitude, point["lat"], point["lon"]) for point in planned_route), default=0)
+        # distance to the route LINE (segments), not just to its vertices, so sparse polylines do not cause false alarms
+        nearest = point_to_polyline_m(latitude, longitude, [(point["lat"], point["lon"]) for point in planned_route])
         progress = min(1.0, max(0.0, (previous.route_progress if previous else 0.0) + 0.02))
-        record = TrajectoryRecord(vehicle_id=vehicle_id, latitude=latitude, longitude=longitude, speed_kmh=speed_kmh, heading=heading, planned_route=planned_route, actual_route=([{"lat": previous.latitude, "lon": previous.longitude}] if previous else []) + [{"lat": latitude, "lon": longitude}], deviation_distance_m=round(nearest, 2), route_progress=progress, is_deviating=nearest > 250 or (previous is not None and abs(speed_kmh - previous.speed_kmh) > 35), timestamp=datetime.utcnow())
+        record = TrajectoryRecord(vehicle_id=vehicle_id, latitude=latitude, longitude=longitude, speed_kmh=speed_kmh, heading=heading, planned_route=planned_route, actual_route=([{"lat": previous.latitude, "lon": previous.longitude}] if previous else []) + [{"lat": latitude, "lon": longitude}], deviation_distance_m=round(nearest, 2), route_progress=progress, is_deviating=nearest > DEVIATION_THRESHOLD_M or (previous is not None and abs(speed_kmh - previous.speed_kmh) > 35), timestamp=datetime.utcnow())
         db.add(record)
         db.add(Telemetry(vehicle_id=vehicle_id, lat=latitude, lon=longitude, speed_kmh=speed_kmh, heading=heading, timestamp=record.timestamp))
         vehicle.lat, vehicle.lon, vehicle.speed_kmh, vehicle.heading, vehicle.updated_at = latitude, longitude, speed_kmh, heading, record.timestamp

@@ -15,10 +15,9 @@ class RoutePoint(BaseModel):
 
 class RouteOut(BaseModel):
     id: str; name: str; eta_min: float; delay_min: float; uncertainty_min: float; risk: str; distance_km: float; points: list[RoutePoint]; explanation: str
+    eta_lower: float | None = None; eta_upper: float | None = None; risk_score: float | None = None; incidents_hit: list[str] = []
 
 class RecommendationOut(BaseModel):
-    decision_id: str | None = None
-    reasoning: str | None = None
     vehicle_id: str
     current_eta_min: float
     delay_min: float
@@ -28,6 +27,10 @@ class RecommendationOut(BaseModel):
     routes: list[RouteOut]
     backup_vehicle_id: str | None
     backup_eta_min: float | None
+    decision_id: str | None = None
+    recommended_route_id: str | None = None
+    decision: dict | None = None
+    routing_source: dict | None = None
 
 class ActionIn(BaseModel):
     action: str = Field(pattern="^(reroute|dispatch_backup|acknowledge)$")

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 450" role="img" aria-label="Hospital building with an ambulance arriving">
+  <rect width="600" height="450" fill="#e3efd6"/>
+  <circle cx="110" cy="90" r="40" fill="#f0d34a" opacity=".7"/>
+  <rect x="150" y="120" width="300" height="250" rx="14" fill="#fbf9f2" stroke="#1c0f0e" stroke-width="3"/>
+  <rect x="245" y="80" width="110" height="60" rx="10" fill="#fbf9f2" stroke="#1c0f0e" stroke-width="3"/>
+  <circle cx="300" cy="110" r="22" fill="#b65e5a"/>
+  <rect x="293" y="96" width="14" height="28" rx="2" fill="#fbf9f2"/><rect x="286" y="103" width="28" height="14" rx="2" fill="#fbf9f2"/>
+  <g fill="#67a6c2">
+    <rect x="180" y="160" width="40" height="30" rx="5"/><rect x="240" y="160" width="40" height="30" rx="5"/><rect x="320" y="160" width="40" height="30" rx="5"/><rect x="380" y="160" width="40" height="30" rx="5"/>
+    <rect x="180" y="215" width="40" height="30" rx="5"/><rect x="240" y="215" width="40" height="30" rx="5"/><rect x="320" y="215" width="40" height="30" rx="5"/><rect x="380" y="215" width="40" height="30" rx="5"/>
+  </g>
+  <rect x="265" y="280" width="70" height="90" rx="6" fill="#6a9a63" stroke="#1c0f0e" stroke-width="3"/>
+  <line x1="300" y1="282" x2="300" y2="368" stroke="#1c0f0e" stroke-width="2"/>
+  <rect x="0" y="368" width="600" height="82" fill="#c5c096"/>
+  <rect x="0" y="398" width="600" height="6" fill="#fbf9f2" opacity=".7"/>
+  <circle cx="90" cy="330" r="34" fill="#6a9a63"/><rect x="86" y="340" width="8" height="30" fill="#3a2a27"/>
+  <circle cx="520" cy="320" r="40" fill="#6a9a63"/><rect x="516" y="335" width="8" height="35" fill="#3a2a27"/>
+  <g transform="translate(400 330)">
+    <path d="M0 10 h70 l26 22 v28 h-96z" fill="#fbf9f2" stroke="#1c0f0e" stroke-width="3"/>
+    <path d="M72 14 l20 18 h-20z" fill="#67a6c2"/>
+    <rect x="0" y="38" width="96" height="8" fill="#b65e5a"/>
+    <rect x="22" y="18" width="8" height="20" fill="#b65e5a"/><rect x="16" y="24" width="20" height="8" fill="#b65e5a"/>
+    <rect x="30" y="2" width="16" height="8" rx="2" fill="#b65e5a"/>
+    <circle cx="20" cy="62" r="11" fill="#1c0f0e"/><circle cx="76" cy="62" r="11" fill="#1c0f0e"/>
+  </g>
+</svg>

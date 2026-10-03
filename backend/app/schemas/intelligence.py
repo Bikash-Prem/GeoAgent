@@ -36,6 +36,12 @@ class SimulationRequest(BaseModel):
     seed: int = Field(default=7, ge=0)
 
 
+class CommandRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=300)
+    vehicle_id: str | None = Field(default=None, max_length=32)
+    use_llm: bool = True
+
+
 class SituationResponse(BaseModel):
     situation_id: str
     vehicle_id: str

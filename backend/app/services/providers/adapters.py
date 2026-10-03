@@ -149,7 +149,7 @@ class TraccarFleetProvider:
                 response = await client.get(f"{self.base_url}/api/positions", auth=self.auth)
                 response.raise_for_status()
                 positions = response.json()
-            vehicles = [{"id": str(item["deviceId"]), "lat": item["latitude"], "lon": item["longitude"], "speed_kmh": item.get("speed", 0) * 1.852, "heading": item.get("course", 0), "status": "active"} for item in positions]
+            vehicles = [{"device_id": str(item["deviceId"]), "lat": item["latitude"], "lon": item["longitude"], "speed_kmh": round(item.get("speed", 0) * 1.852, 1), "heading": item.get("course", 0), "fix_time": item.get("fixTime")} for item in positions]  # Traccar speed is in knots
             return FleetObservation("traccar", vehicles, ProviderStatus("traccar", "live", True))
         except (httpx.HTTPError, KeyError, TypeError, ValueError) as error:
             return FleetObservation("traccar", [], ProviderStatus("traccar", "live", False, True, str(error)))
@@ -178,3 +178,52 @@ class FallbackTrafficProvider:
 class FallbackFleetProvider:
     async def vehicles(self) -> FleetObservation:
         return FleetObservation("local", [], ProviderStatus("local", "fallback", True, False, "Using persisted fleet state"))
+
+
+# TomTom Incident Details v5: iconCategory -> GeoAgentic incident kind
+TOMTOM_KIND = {1: "accident", 6: "traffic", 7: "closure", 8: "closure", 9: "closure", 14: "accident"}
+TOMTOM_SEVERITY = {0: "low", 1: "low", 2: "medium", 3: "high", 4: "high"}
+
+
+def normalize_tomtom_incidents(payload: dict) -> list[dict]:
+    """Turn a TomTom incidentDetails response into incident-registry rows (only kinds the risk model understands)."""
+    out = []
+    for item in payload.get("incidents", []):
+        props = item.get("properties", {}) or {}
+        kind = TOMTOM_KIND.get(props.get("iconCategory"))
+        geom = item.get("geometry", {}) or {}
+        coords = geom.get("coordinates") or []
+        if not kind or not coords:
+            continue
+        pts = [coords] if geom.get("type") == "Point" else coords
+        lon = sum(p[0] for p in pts) / len(pts)
+        lat = sum(p[1] for p in pts) / len(pts)
+        # radius covers the affected stretch (half its extent), clamped to a sensible range
+        span = max((abs(p[1] - lat) * 111_000 + abs(p[0] - lon) * 108_000) for p in pts) if len(pts) > 1 else 120
+        events = props.get("events") or [{}]
+        ext_id = str(props.get("id") or item.get("id") or f"{lat:.5f},{lon:.5f}")
+        out.append({"external_id": ext_id, "kind": kind, "severity": TOMTOM_SEVERITY.get(props.get("magnitudeOfDelay", 1), "medium"),
+                    "title": (events[0].get("description") or kind.title())[:150], "lat": lat, "lon": lon,
+                    "radius_m": round(max(80.0, min(600.0, span))), "details": f"TomTom incident, delay magnitude {props.get('magnitudeOfDelay', '?')}"})
+    return out
+
+
+class TomTomIncidentsProvider:
+    """Live road incidents in a bounding box (TomTom Traffic Incident Details v5)."""
+
+    FIELDS = "{incidents{type,geometry{type,coordinates},properties{id,iconCategory,magnitudeOfDelay,events{description}}}}"
+
+    def __init__(self, api_key: str, timeout: float = 5.0):
+        self.api_key, self.timeout = api_key, timeout
+
+    async def incidents(self, bbox: tuple[float, float, float, float]) -> tuple[list[dict], ProviderStatus]:
+        min_lat, min_lon, max_lat, max_lon = bbox
+        params = {"key": self.api_key, "bbox": f"{min_lon},{min_lat},{max_lon},{max_lat}", "fields": self.FIELDS, "language": "en-GB", "timeValidityFilter": "present"}
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get("https://api.tomtom.com/traffic/services/5/incidentDetails", params=params)
+                response.raise_for_status()
+                rows = normalize_tomtom_incidents(response.json())
+            return rows, ProviderStatus("tomtom-incidents", "live", True)
+        except (httpx.HTTPError, KeyError, TypeError, ValueError) as error:
+            return [], ProviderStatus("tomtom-incidents", "live", False, True, str(error))

@@ -12,37 +12,45 @@ from app.db.session import Base, engine, SessionLocal
 from app.models.entities import Vehicle, Incident, Telemetry
 from app.models import intelligence as intelligence_models
 from app.models.intelligence import Mission
+from app.models import operations as operations_models  # registers hospital / alert / dispatch tables
+from app.services.operations import seed_hospitals
+from app.algorithms.astar import build_demo_graph
+from app.algorithms.geometry import metres
+from app.services.risk import to_free_flow_graph
 from app.services.situation import SituationEngine
 from app.services.trajectory import TrajectoryEngine
-from app.services.twin_loop import TwinLoop
 from app.api.routes import router
+from app.api.operations_routes import router as operations_router
+from app.services.control_loop import ControlLoop
+from app.services.providers.adapters import TraccarFleetProvider
+from app.services.providers.registry import fleet_provider
 
 def seed_database():
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         if db.scalar(select(Vehicle).limit(1)) is None:
             db.add_all([
-              Vehicle(id='AMB-07',name='AMB-07',status='active',lat=19.0178,lon=72.8478,speed_kmh=62,heading=72,hospital='City General Hospital'),
-              Vehicle(id='AMB-12',name='AMB-12',status='available',lat=19.0432,lon=72.8618,speed_kmh=0,heading=0,hospital=None),
-              Vehicle(id='AMB-03',name='AMB-03',status='available',lat=19.0285,lon=72.8560,speed_kmh=0,heading=0,hospital=None)])
+              Vehicle(id='AMB-07',name='AMB-07',status='available',lat=12.9712,lon=77.5940,speed_kmh=0,heading=72,hospital=None),
+              Vehicle(id='AMB-12',name='AMB-12',status='available',lat=12.9655,lon=77.5905,speed_kmh=0,heading=0,hospital=None),
+              Vehicle(id='AMB-03',name='AMB-03',status='available',lat=12.9780,lon=77.6100,speed_kmh=0,heading=0,hospital=None)])
         if db.scalar(select(Incident).limit(1)) is None:
             db.add_all([
-              Incident(id='INC-204',kind='accident',severity='high',title='Accident on Main St.',lat=19.0190,lon=72.8420,radius_m=220,details='Multi-vehicle collision; lane closure reported.'),
-              Incident(id='INC-205',kind='closure',severity='medium',title='Road closure · 06:00–10:00',lat=19.0255,lon=72.8390,radius_m=150,details='Temporary lane closure.'),
-              Incident(id='INC-206',kind='traffic',severity='medium',title='Heavy traffic corridor',lat=19.0360,lon=72.8490,radius_m=350,details='Average speed down 68% from baseline.')])
-        if db.scalar(select(Mission).limit(1)) is None:
-            db.add(Mission(id='MIS-204', vehicle_id='AMB-07', emergency_type='critical_patient', priority=1, destination='City General Hospital', status='active'))
+              Incident(id='INC-204',kind='accident',severity='high',title='Accident on Main St.',lat=12.9731,lon=77.5997,radius_m=220,details='Multi-vehicle collision; lane closure reported.'),
+              Incident(id='INC-205',kind='closure',severity='medium',title='Road closure · 06:00–10:00',lat=12.9718,lon=77.6012,radius_m=150,details='Temporary lane closure.'),
+              Incident(id='INC-206',kind='traffic',severity='medium',title='Heavy traffic corridor',lat=12.9705,lon=77.5988,radius_m=350,details='Average speed down 68% from baseline.')])
         db.commit()
+        seed_hospitals(db)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     seed_database()
-    app.state.twin_loop = TwinLoop(SessionLocal)
-    await app.state.twin_loop.start()
+    app.state.control_loop = ControlLoop(SessionLocal)
+    if settings.twin_tick_hz > 0:
+        await app.state.control_loop.start()
     yield
-    await app.state.twin_loop.stop()
+    await app.state.control_loop.stop()
 
-app=FastAPI(title='GeoAgentic Emergency Response Copilot',version='2.0.0',docs_url='/docs' if settings.docs_enabled else None,redoc_url=None,lifespan=lifespan)
+app=FastAPI(title='GeoAgentic Emergency Response Copilot',version='3.0.0',docs_url='/docs' if settings.docs_enabled else None,redoc_url=None,lifespan=lifespan)
 allowed_hosts=[x.strip() for x in settings.allowed_hosts.split(',') if x.strip()]
 if allowed_hosts:
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
@@ -58,22 +66,17 @@ async def security_headers(request: Request, call_next):
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['Referrer-Policy'] = 'no-referrer'
-    response.headers['Permissions-Policy'] = 'geolocation=(self), microphone=(), camera=()'
+    response.headers['Permissions-Policy'] = 'geolocation=(self), microphone=(self), camera=()'
     response.headers['Cache-Control'] = 'no-store'
     response.headers['X-Response-Time-Ms'] = str(round((time.perf_counter() - started) * 1000, 2))
     return response
 
 app.include_router(router)
+app.include_router(operations_router)
 
 @app.get('/')
 def root():
-    return {
-        'service': 'geoagentic-api',
-        'status': 'ok',
-        'docs': '/docs',
-        'health': '/api/health',
-        'ui': 'http://localhost:5173',
-    }
+    return {'service': 'geoagentic-api', 'status': 'ok', 'docs': '/docs', 'health': '/api/health', 'ui': 'http://localhost:5173'}
 
 class ConnectionManager:
     def __init__(self):self.connections=[]
@@ -86,40 +89,40 @@ class ConnectionManager:
             except: self.disconnect(ws)
 manager=ConnectionManager()
 
-@app.websocket('/ws/twin')
-async def twin_stream(ws: WebSocket):
-    await ws.accept()
-    loop: TwinLoop = app.state.twin_loop
-    queue = loop.subscribe()
-    try:
-        if loop.latest:
-            await ws.send_json({'type': 'TWIN_SNAPSHOT_UPDATED', 'snapshot': loop.latest})
-        while True:
-            snapshot = await queue.get()
-            await ws.send_json({'type': 'TWIN_SNAPSHOT_UPDATED', 'snapshot': snapshot})
-    except WebSocketDisconnect:
-        pass
-    finally:
-        loop.unsubscribe(queue)
-
+# Telemetry socket is now a read-only stream of the current operational state.
+# The local control loop advances an active dispatch mission; Traccar can replace that
+# movement with real GPS without changing the frontend contract.
 @app.websocket('/ws/telemetry')
-async def telemetry(ws: WebSocket):
-    """Read-only live fleet stream. Telemetry is ingested through the HTTP endpoint or Traccar, not fabricated here."""
+async def telemetry(ws:WebSocket):
     await manager.connect(ws)
     try:
         while True:
             with SessionLocal() as db:
-                vehicles = db.scalars(select(Vehicle).order_by(Vehicle.id)).all()
-                payload = {
-                    'type': 'fleet_snapshot',
-                    'vehicles': [
-                        {'id': v.id, 'name': v.name, 'status': v.status, 'lat': v.lat, 'lon': v.lon, 'speed_kmh': v.speed_kmh, 'heading': v.heading, 'updated_at': v.updated_at.isoformat()}
-                        for v in vehicles
-                    ],
-                }
-            await manager.broadcast(payload)
+                rows = db.scalars(select(Vehicle).order_by(Vehicle.id)).all()
+                for v in rows:
+                    await ws.send_json({
+                        'type':'telemetry','vehicle_id':v.id,'lat':v.lat,'lon':v.lon,'speed_kmh':v.speed_kmh,
+                        'heading':v.heading,'timestamp':v.updated_at.isoformat(),'source':'traccar' if isinstance(fleet_provider(), TraccarFleetProvider) else 'local-mission'
+                    })
             await asyncio.sleep(2)
     except WebSocketDisconnect:
         manager.disconnect(ws)
     except Exception:
         manager.disconnect(ws)
+
+
+@app.websocket('/ws/twin')
+async def twin_stream(ws: WebSocket):
+    """Control-loop snapshots: fresh read-only recommendation, decision drift, provider status."""
+    await ws.accept()
+    loop: ControlLoop = app.state.control_loop
+    queue = loop.subscribe()
+    try:
+        if loop.latest:
+            await ws.send_json({'type': 'TWIN_SNAPSHOT_UPDATED', 'snapshot': loop.latest})
+        while True:
+            await ws.send_json({'type': 'TWIN_SNAPSHOT_UPDATED', 'snapshot': await queue.get()})
+    except WebSocketDisconnect:
+        pass
+    finally:
+        loop.unsubscribe(queue)
