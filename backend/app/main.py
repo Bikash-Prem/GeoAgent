@@ -1,4 +1,4 @@
-import asyncio, random, time, uuid
+import asyncio, time, uuid
 from datetime import datetime
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
@@ -14,6 +14,7 @@ from app.models import intelligence as intelligence_models
 from app.models.intelligence import Mission
 from app.services.situation import SituationEngine
 from app.services.trajectory import TrajectoryEngine
+from app.services.twin_loop import TwinLoop
 from app.api.routes import router
 
 def seed_database():
@@ -21,14 +22,14 @@ def seed_database():
     with SessionLocal() as db:
         if db.scalar(select(Vehicle).limit(1)) is None:
             db.add_all([
-              Vehicle(id='AMB-07',name='AMB-07',status='active',lat=12.9712,lon=77.5940,speed_kmh=62,heading=72,hospital='City General Hospital'),
-              Vehicle(id='AMB-12',name='AMB-12',status='available',lat=12.9655,lon=77.5905,speed_kmh=0,heading=0,hospital=None),
-              Vehicle(id='AMB-03',name='AMB-03',status='available',lat=12.9780,lon=77.6100,speed_kmh=0,heading=0,hospital=None)])
+              Vehicle(id='AMB-07',name='AMB-07',status='active',lat=19.0178,lon=72.8478,speed_kmh=62,heading=72,hospital='City General Hospital'),
+              Vehicle(id='AMB-12',name='AMB-12',status='available',lat=19.0432,lon=72.8618,speed_kmh=0,heading=0,hospital=None),
+              Vehicle(id='AMB-03',name='AMB-03',status='available',lat=19.0285,lon=72.8560,speed_kmh=0,heading=0,hospital=None)])
         if db.scalar(select(Incident).limit(1)) is None:
             db.add_all([
-              Incident(id='INC-204',kind='accident',severity='high',title='Accident on Main St.',lat=12.9731,lon=77.5997,radius_m=220,details='Multi-vehicle collision; lane closure reported.'),
-              Incident(id='INC-205',kind='closure',severity='medium',title='Road closure · 06:00–10:00',lat=12.9718,lon=77.6012,radius_m=150,details='Temporary lane closure.'),
-              Incident(id='INC-206',kind='traffic',severity='medium',title='Heavy traffic corridor',lat=12.9705,lon=77.5988,radius_m=350,details='Average speed down 68% from baseline.')])
+              Incident(id='INC-204',kind='accident',severity='high',title='Accident on Main St.',lat=19.0190,lon=72.8420,radius_m=220,details='Multi-vehicle collision; lane closure reported.'),
+              Incident(id='INC-205',kind='closure',severity='medium',title='Road closure · 06:00–10:00',lat=19.0255,lon=72.8390,radius_m=150,details='Temporary lane closure.'),
+              Incident(id='INC-206',kind='traffic',severity='medium',title='Heavy traffic corridor',lat=19.0360,lon=72.8490,radius_m=350,details='Average speed down 68% from baseline.')])
         if db.scalar(select(Mission).limit(1)) is None:
             db.add(Mission(id='MIS-204', vehicle_id='AMB-07', emergency_type='critical_patient', priority=1, destination='City General Hospital', status='active'))
         db.commit()
@@ -36,7 +37,10 @@ def seed_database():
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     seed_database()
+    app.state.twin_loop = TwinLoop(SessionLocal)
+    await app.state.twin_loop.start()
     yield
+    await app.state.twin_loop.stop()
 
 app=FastAPI(title='GeoAgentic Emergency Response Copilot',version='2.0.0',docs_url='/docs' if settings.docs_enabled else None,redoc_url=None,lifespan=lifespan)
 allowed_hosts=[x.strip() for x in settings.allowed_hosts.split(',') if x.strip()]
@@ -61,6 +65,16 @@ async def security_headers(request: Request, call_next):
 
 app.include_router(router)
 
+@app.get('/')
+def root():
+    return {
+        'service': 'geoagentic-api',
+        'status': 'ok',
+        'docs': '/docs',
+        'health': '/api/health',
+        'ui': 'http://localhost:5173',
+    }
+
 class ConnectionManager:
     def __init__(self):self.connections=[]
     async def connect(self,ws):await ws.accept();self.connections.append(ws)
@@ -72,19 +86,40 @@ class ConnectionManager:
             except: self.disconnect(ws)
 manager=ConnectionManager()
 
+@app.websocket('/ws/twin')
+async def twin_stream(ws: WebSocket):
+    await ws.accept()
+    loop: TwinLoop = app.state.twin_loop
+    queue = loop.subscribe()
+    try:
+        if loop.latest:
+            await ws.send_json({'type': 'TWIN_SNAPSHOT_UPDATED', 'snapshot': loop.latest})
+        while True:
+            snapshot = await queue.get()
+            await ws.send_json({'type': 'TWIN_SNAPSHOT_UPDATED', 'snapshot': snapshot})
+    except WebSocketDisconnect:
+        pass
+    finally:
+        loop.unsubscribe(queue)
+
 @app.websocket('/ws/telemetry')
-async def telemetry(ws:WebSocket):
+async def telemetry(ws: WebSocket):
+    """Read-only live fleet stream. Telemetry is ingested through the HTTP endpoint or Traccar, not fabricated here."""
     await manager.connect(ws)
     try:
-        lat,lon=12.9712,77.5940
         while True:
-            lat += 0.00004; lon += 0.00007
-            payload={'type':'telemetry','vehicle_id':'AMB-07','lat':lat,'lon':lon,'speed_kmh':round(48+random.random()*18,1),'heading':72,'timestamp':datetime.utcnow().isoformat()}
             with SessionLocal() as db:
-                TrajectoryEngine().ingest(db, 'AMB-07', lat, lon, payload['speed_kmh'], 72)
-                situation = SituationEngine(db).build('AMB-07').as_dict()
+                vehicles = db.scalars(select(Vehicle).order_by(Vehicle.id)).all()
+                payload = {
+                    'type': 'fleet_snapshot',
+                    'vehicles': [
+                        {'id': v.id, 'name': v.name, 'status': v.status, 'lat': v.lat, 'lon': v.lon, 'speed_kmh': v.speed_kmh, 'heading': v.heading, 'updated_at': v.updated_at.isoformat()}
+                        for v in vehicles
+                    ],
+                }
             await manager.broadcast(payload)
-            await manager.broadcast({'type':'SITUATION_STATE_UPDATED','vehicle_id':'AMB-07','situation':situation})
             await asyncio.sleep(2)
-    except WebSocketDisconnect: manager.disconnect(ws)
-    except Exception: manager.disconnect(ws)
+    except WebSocketDisconnect:
+        manager.disconnect(ws)
+    except Exception:
+        manager.disconnect(ws)

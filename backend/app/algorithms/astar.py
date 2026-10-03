@@ -18,7 +18,11 @@ class RoadGraph:
         self.adj.setdefault(a, []).append(Edge(b, weight, risk))
         self.adj.setdefault(b, []).append(Edge(a, weight, risk))
     def heuristic(self, a, b):
-        x,y=self.pos[a]; u,v=self.pos[b]; return hypot(x-u,y-v)*100000
+        # Edge weights are arbitrary operational costs (not meters), so a
+        # geographic-distance heuristic cannot be proven admissible. Returning
+        # zero preserves optimality while the real-road production path uses a
+        # routing provider rather than this demo graph.
+        return 0.0
     def astar(self, start, goal, blocked=None, penalty=0.0, blocked_edges=None):
         blocked = blocked or set()
         blocked_edges = blocked_edges or set()

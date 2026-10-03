@@ -17,6 +17,8 @@ class RouteOut(BaseModel):
     id: str; name: str; eta_min: float; delay_min: float; uncertainty_min: float; risk: str; distance_km: float; points: list[RoutePoint]; explanation: str
 
 class RecommendationOut(BaseModel):
+    decision_id: str | None = None
+    reasoning: str | None = None
     vehicle_id: str
     current_eta_min: float
     delay_min: float

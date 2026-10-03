@@ -24,7 +24,16 @@ services:
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,api}
       API_KEY: ${API_KEY:-}
       ENVIRONMENT: ${ENVIRONMENT:-production}
-      DOCS_ENABLED: ${DOCS_ENABLED:-false}
+      DOCS_ENABLED: ${DOCS_ENABLED:-true}
+      ROUTING_PROVIDER: ${ROUTING_PROVIDER:-google}
+      GOOGLE_ROUTES_API_KEY: ${GOOGLE_ROUTES_API_KEY:-}
+      GOOGLE_ROUTING_PREFERENCE: ${GOOGLE_ROUTING_PREFERENCE:-TRAFFIC_AWARE}
+      TRAFFIC_PROVIDER: ${TRAFFIC_PROVIDER:-local}
+      TOMTOM_API_KEY: ${TOMTOM_API_KEY:-}
+      FLEET_PROVIDER: ${FLEET_PROVIDER:-local}
+      FLEET_API_URL: ${FLEET_API_URL:-}
+      FLEET_API_USERNAME: ${FLEET_API_USERNAME:-}
+      FLEET_API_PASSWORD: ${FLEET_API_PASSWORD:-}
     ports:
       - "8000:8000"
     depends_on:
@@ -38,13 +47,14 @@ services:
     restart: unless-stopped
 
   frontend:
-    build: ./frontend
-    environment:
-      VITE_API_URL: http://localhost:8000
-      VITE_WS_URL: ws://localhost:8000
-      VITE_API_KEY: ${API_KEY:-}
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+        VITE_WS_URL: ${VITE_WS_URL:-ws://localhost:8000}
+        VITE_API_KEY: ${API_KEY:-}
     ports:
-      - "5173:5173"
+      - "5173:80"
     depends_on:
       api:
         condition: service_healthy

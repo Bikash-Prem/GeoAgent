@@ -2,144 +2,199 @@
 
 ## Emergency Decision Intelligence Platform
 
-GeoAgentic is a real-time emergency decision intelligence platform that maintains a live model of the emergency situation, predicts how it will evolve, simulates competing response actions, evaluates their risk, uncertainty and resource impact, and gives the dispatcher an evidence-backed decision.
+GeoAgentic is a local-first emergency decision intelligence control plane. It maintains a grounded situation state from fleet, telemetry and incident data; obtains real-road route candidates from a routing provider; evaluates ETA, route risk, uncertainty and fleet consequences; compares counterfactual actions; records the recommendation and evidence; and leaves the final action to a dispatcher.
 
-This repository is a modular-monolith prototype. It uses a deterministic road graph, persisted demo data and transparent baseline predictors. It is decision support, not an autonomous medical or emergency authority.
+> **Core question:** Given everything happening right now, what should we do next — and why?
 
-## Problem
+This repository is intentionally human-in-the-loop. It does not claim autonomous emergency authority, trained medical models, validated accident detection, RL performance, or real-world response-time improvements.
 
-Emergency vehicles face congestion, accidents, closures, unexpected delays and fragmented operational information. Dispatchers need a grounded comparison of what to do next, not just a map pin or a shortest route.
-
-## Core Question
-
-> Given everything happening right now, what should we do next - and why?
-
-## What Makes the System Different
-
-The backend is organized around decisions rather than routes:
+## Current product flow
 
 ```text
-Observe -> Situation -> Diagnose -> Predict -> Counterfactual Actions
-			 -> Evaluate -> Policy -> Recommend -> Explain -> Human Decision -> Feedback
+REAL WORLD / LOCAL STATE
+        │
+        ├── Fleet / GPS / Traccar
+        ├── Incident registry
+        └── Traffic provider / telemetry
+        │
+        ▼
+SITUATION ENGINE
+        │  evidence + diagnosis + freshness
+        ▼
+ROUTING PROVIDER
+        │  Google Routes (primary) / Mapbox / local fallback
+        ▼
+PREDICTION + ROUTE RISK
+        │  ETA interval + incident proximity + delay probability
+        ▼
+COUNTERFACTUAL ACTION ENGINE
+        │  continue / reroute / backup / combined
+        ▼
+POLICY ENGINE
+        │  deterministic safety-first baseline
+        ▼
+DECISION TRACE
+        │  evidence / provider / actions / model-policy versions
+        ▼
+DISPATCHER
+        │  approve / reject
+        ▼
+OUTCOME + FEEDBACK
 ```
 
-The operational integration is the project focus. The individual algorithms are established techniques and are not presented as novel research.
+## Important routing decision
 
-## System Architecture
+The production decision path **does not use the toy A→H A* graph**. Real-road routing is provider-backed.
 
-```mermaid
-flowchart TD
-		F[GPS and fleet telemetry] --> S[Situation Engine]
-		I[Incidents and road evidence] --> S
-		S --> D[Diagnosis and evidence fusion]
-		S --> P[Prediction Engine\nheuristic ETA and uncertainty]
-		P --> R[Routing Engine\nA* and K candidates]
-		R --> A[Counterfactual Action Engine]
-		A --> POL[Policy Engine\nrule-based baseline]
-		POL --> G[GeoAgent\nrestricted tool registry]
-		G --> T[Decision Trace]
-		T --> H[Dispatcher approval]
-		H --> O[Outcome and feedback]
-		DB[(SQLAlchemy database)] --- S
-		DB --- T
+### Google Routes API
+
+Set:
+
+```env
+ROUTING_PROVIDER=google
+GOOGLE_ROUTES_API_KEY=your_key
+GOOGLE_ROUTING_PREFERENCE=TRAFFIC_AWARE
 ```
 
-## Implemented Components
+GeoAgentic calls Google Routes `ComputeRoutes` with traffic-aware driving routes and alternative routes. The returned distance, duration and encoded polyline are normalized into the internal `RoutingProvider` contract. The decision layer then evaluates those routes for emergency-specific risk and fleet consequences. Google documents up to three route results when alternatives are requested and requires a response field mask. See the official [Routes API documentation](https://developers.google.com/maps/documentation/routes/reference/rpc).
 
-### Situation Engine
+`TRAFFIC_AWARE_OPTIMAL` can be selected later when higher routing quality is worth its additional latency/cost trade-off. The default local configuration uses `TRAFFIC_AWARE`.
 
-`SituationEngine` combines current vehicle state, active incidents and recent telemetry into a `SituationState`. It calculates proximity, speed change, diagnosis confidence and stale-data status. Each conclusion has structured evidence IDs, source, relevance and confidence.
+### Why the custom A* code still exists
 
-### Trajectory and Routing
+`backend/app/algorithms/astar.py` is retained as a deterministic algorithmic/research component and test fixture. Its heuristic is now zero because the demo graph's edge weights are arbitrary operational costs, so a geographic-distance heuristic cannot be proven admissible. It is **not** the operational road-routing source.
 
-The existing A* graph remains the deterministic routing core. The bounded K-route generator now blocks previously used spur edges, returning distinct alternatives. `TrajectoryEngine` persists GPS points, planned/actual route samples, route progress, deviation distance and abnormal speed flags. The graph supports dynamic risk penalties, and `SpatialGrid` remains available for local spatial lookup. A production map-matching/HMM implementation is planned; the current telemetry comparison is a transparent baseline.
+## Product UI
 
-### Prediction and Uncertainty
+The frontend is an operational control plane rather than a marketing landing page:
 
-`HeuristicETAPredictor` is an explicit baseline, not a trained ML model. It returns an ETA estimate, lower and upper interval, confidence, uncertainty, model name, version and feature names. Traffic and risk predictors can be added behind the same replaceable service boundary.
+- **Command Center** — active emergency, live fleet, incidents, provider status and map.
+- **Situation Room** — evidence, diagnosis, confidence and decision pipeline.
+- **Decision Studio** — route alternatives, ETA, risk, uncertainty, reasoning and human approval.
+- **What-If Lab** — deterministic counterfactual scenarios without mutating live state.
+- **Fleet Intelligence** — fleet state and backup/coverage consequences.
+- **Emergency Replay** — live local control-loop snapshots and replay controls.
+- **Analytics** — recorded operational events and decision counts.
+- **Decision & AI Audit** — persisted evidence, actions, provider status and human decisions.
 
-### Counterfactual Actions
+The map uses real latitude/longitude coordinates. It does not project Bangalore data into another city or fabricate nearby vehicles/signals.
 
-The action engine evaluates `continue`, `reroute` alternatives and `dispatch_backup` using ETA, interval, risk, delay probability, evidence IDs and coverage impact. This lets the system compare actions, not only routes.
+## Provider architecture
 
-### Fleet and Policy Reasoning
+Providers are behind explicit contracts so the decision engine is independent of vendors:
 
-The current fleet calculation identifies available backup units and estimates backup response time from persisted vehicle positions. Dispatching a backup exposes a coverage-change trade-off. `RuleBasedPolicy` selects using ETA, risk and coverage impact. An RL or optimization policy can implement the same interface later; no RL model or performance claim is included.
+```text
+RoutingProvider
+  ├── GoogleRoutesProvider
+  ├── MapboxRoutingProvider
+  └── FallbackRoutingProvider
 
-### GeoAgent
+TrafficProvider
+  ├── TomTomTrafficProvider
+  └── FallbackTrafficProvider
 
-The GeoAgent is a grounded orchestrator and deterministic fallback. It may call only registered tools such as `get_vehicle_state`, `get_incidents` and `get_situation`; unknown tools are rejected. It does not calculate routes, invent traffic, estimate hospital capacity or execute arbitrary code. An LLM provider is not required for the decision path.
+FleetProvider
+  ├── TraccarFleetProvider
+  └── FallbackFleetProvider
+```
 
-### Decision Trace and Human Approval
+Provider failures are represented as structured availability/staleness status. A fallback is explicitly labelled as fallback and is not presented as live traffic or live routing.
 
-Decisions persist situation, evaluated actions, recommendation, policy version, evidence references and timestamps. Approval, rejection and outcome records are separate trace events. The dispatcher remains the final decision maker.
+## Fleet / Traccar
 
-### Simulation
+For live fleet positions:
 
-The simulation API provides reproducible synthetic state for accident/congestion, road closure, traffic spike and competing emergencies. The accident scenario also invokes the decision engine and persists its run. Full time-stepped road/fleet simulation and benchmarking are planned.
+```env
+FLEET_PROVIDER=traccar
+FLEET_API_URL=https://your-traccar-host
+FLEET_API_USERNAME=...
+FLEET_API_PASSWORD=...
+```
 
-## ML / DL and RL Status
+The Traccar adapter reads `/api/positions` and normalizes device position, speed, course and status into the internal fleet contract.
 
-- **Implemented:** transparent heuristic ETA baseline, deterministic evidence fusion, graph routing, uncertainty intervals and rule-based policy.
-- **Interfaces ready:** replaceable ETA/prediction and policy boundaries, model/policy version fields, structured features and evidence.
-- **Planned:** trained ETA, traffic forecasting, incident classification, computer-vision road evidence, RL policy learning and calibration experiments.
-- **Not claimed:** trained neural models, validated accident detection, RL performance, response-time improvements or real-world deployment results.
+## Decision trace
+
+A generated decision records:
+
+- situation snapshot
+- evidence items and their sources
+- routing provider observation
+- route candidates
+- ETA prediction metadata
+- route risk and delay probability
+- action evaluations
+- fleet coverage impact
+- selected policy/version
+- recommendation and reasoning
+- human approval/rejection
+- outcome/feedback events
+
+GET recommendation access is read-only. Decision generation happens through the explicit analysis endpoint, so a dashboard refresh does not silently create another decision record.
+
+## Simulation
+
+The What-If Lab supports deterministic synthetic counterfactuals:
+
+- `accident_congestion`
+- `road_closure`
+- `traffic_spike`
+- `competing_emergencies`
+
+A simulation does not mutate the live fleet/incident database. It records the baseline decision and a scenario-specific counterfactual score. Synthetic simulation values are explicitly marked as synthetic.
 
 ## API
 
-Legacy frontend-compatible routes remain available:
-
-- `GET /api/health`, `GET /api/ready`
-- `GET /api/vehicles`, `GET /api/incidents`
-- `GET /api/recommendations/{vehicle_id}`
-- `POST /api/vehicles/{vehicle_id}/actions`
-- `GET /api/audit`
-- `WS /ws/telemetry`
-
-Decision-intelligence routes are versioned under `/api/v1`:
-
-- `GET /api/v1/situations/{vehicle_id}`
-- `POST /api/v1/vehicles/{vehicle_id}/telemetry`
-- `POST /api/v1/routes/generate`
-- `POST /api/v1/actions/generate`, `POST /api/v1/actions/evaluate`
-- `POST /api/v1/decisions/analyze` with `{"vehicle_id":"AMB-07"}`
-- `GET /api/v1/decisions/{decision_id}`
-- `GET /api/v1/decisions/{decision_id}/trace`
-- `POST /api/v1/decisions/{decision_id}/approve`
-- `POST /api/v1/decisions/{decision_id}/reject`
-- `POST /api/v1/decisions/{decision_id}/outcome`
-- `GET /api/v1/decisions/{decision_id}/feedback`
-- `GET /api/v1/agent/tools?vehicle_id=AMB-07`
-- `GET /api/v1/simulation/scenarios`
-- `POST /api/v1/simulation/run`
-- `GET /api/v1/evaluation/strategies`
-
-Decision responses include the recommended action, ETA interval, risk, fleet impact, alternatives, evidence, reasoning, model/policy versions and an approval requirement.
-
-## Project Structure
+### Core
 
 ```text
-backend/app/
-	algorithms/              A*, K routes and spatial indexing
-	api/                     legacy and versioned FastAPI routes
-	core/                    environment configuration
-	db/                      SQLAlchemy engine and sessions
-	models/                  fleet, incident, telemetry and decision entities
-	schemas/                 request and response validation
-	services/
-		situation.py           live situation and evidence fusion
-		prediction.py          replaceable ETA baseline
-		counterfactual.py      action generation and evaluation
-		policy.py              rule-based policy interface
-		agent.py               restricted GeoAgent tools
-		engine.py              decision composition and trace persistence
-		simulation.py          synthetic scenario runner
-frontend/                  React, TypeScript, Vite and Leaflet dashboard
+GET  /api/health
+GET  /api/ready
+GET  /api/vehicles
+GET  /api/incidents
+GET  /api/recommendations/{vehicle_id}       # read-only latest decision
+GET  /api/audit
 ```
 
-## Setup
+### Decision intelligence
 
-Prerequisites: Python 3.13+, Node.js 20+, npm, and optionally Docker Desktop for PostgreSQL.
+```text
+GET  /api/v1/situations/{vehicle_id}
+POST /api/v1/vehicles/{vehicle_id}/telemetry
+POST /api/v1/routes/generate
+POST /api/v1/actions/generate
+POST /api/v1/actions/evaluate
+POST /api/v1/decisions/analyze
+GET  /api/v1/decisions/{decision_id}
+GET  /api/v1/decisions/{decision_id}/trace
+POST /api/v1/decisions/{decision_id}/approve
+POST /api/v1/decisions/{decision_id}/reject
+POST /api/v1/decisions/{decision_id}/outcome
+GET  /api/v1/decisions/{decision_id}/feedback
+```
+
+### Simulation / live state
+
+```text
+GET  /api/v1/simulation/scenarios
+POST /api/v1/simulation/run
+GET  /api/v1/twin/snapshot
+GET  /api/v1/twin/providers
+POST /api/v1/twin/command
+WS   /ws/twin
+WS   /ws/telemetry
+```
+
+`/ws/telemetry` is now a read-only fleet stream. It does not generate random GPS points or write synthetic observations into the database.
+
+## Local setup
+
+Prerequisites:
+
+- Python 3.12+ (3.13 is fine)
+- Node.js 20+
+- npm
+- optional Docker Desktop
 
 ```powershell
 Copy-Item .env.example .env
@@ -150,18 +205,24 @@ npm install
 Pop-Location
 ```
 
-For local development without Docker/PostgreSQL, use SQLite:
+For local SQLite development, leave `DATABASE_URL` empty or set:
+
+```env
+DATABASE_URL=sqlite:///./geoagentic.db
+ALLOWED_HOSTS=localhost,127.0.0.1
+CORS_ORIGINS=http://localhost:5173
+```
+
+Start the API:
 
 ```powershell
-$env:DATABASE_URL = 'sqlite:///./geoagentic.db'
-$env:ALLOWED_HOSTS = 'localhost,127.0.0.1'
-$env:CORS_ORIGINS = 'http://localhost:5173'
 Push-Location backend
+$env:PYTHONPATH='.'
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 Pop-Location
 ```
 
-In a second terminal:
+Start the frontend in another terminal:
 
 ```powershell
 Push-Location frontend
@@ -169,37 +230,132 @@ npm run dev
 Pop-Location
 ```
 
-With Docker available, `docker compose up --build` starts PostgreSQL, the API and the frontend. Environment variables include `DATABASE_URL`, `CORS_ORIGINS`, `ALLOWED_HOSTS`, `API_KEY`, `ENVIRONMENT`, `DOCS_ENABLED` and the PostgreSQL settings in `.env.example`. Never commit `.env` or credentials.
+Open `http://localhost:5173`.
 
-## Demo Scenario
+Without provider credentials, the application remains runnable using explicit local fallbacks. For real-road route candidates, configure Google Routes or Mapbox. For real fleet telemetry, configure Traccar.
 
-The seeded scenario includes AMB-07, available backup units, active incidents and a demo road graph. A decision request can detect the incident context, diagnose disruption, generate distinct routes, evaluate continue/reroute/backup actions, account for coverage impact, choose a deterministic recommendation, persist a trace, accept dispatcher approval and record an outcome.
+## Docker
+
+`docker compose up --build` starts PostgreSQL, the API and the nginx-served frontend. The frontend is exposed at port `5173` and the API at `8000`.
+
+Vite variables are supplied as Docker build arguments because they are frontend build-time configuration, not runtime nginx environment variables.
+
+## Environment
+
+```env
+POSTGRES_DB=geoagentic
+POSTGRES_USER=geoagentic
+POSTGRES_PASSWORD=geoagentic
+DATABASE_URL=
+CORS_ORIGINS=http://localhost:5173
+ALLOWED_HOSTS=localhost,127.0.0.1
+API_KEY=
+ENVIRONMENT=development
+DOCS_ENABLED=true
+
+ROUTING_PROVIDER=google
+GOOGLE_ROUTES_API_KEY=
+GOOGLE_ROUTING_PREFERENCE=TRAFFIC_AWARE
+DESTINATION_LAT=12.9719
+DESTINATION_LON=77.6072
+
+MAPBOX_ACCESS_TOKEN=
+TRAFFIC_PROVIDER=local
+TOMTOM_API_KEY=
+FLEET_PROVIDER=local
+FLEET_API_URL=
+FLEET_API_USERNAME=
+FLEET_API_PASSWORD=
+PROVIDER_TIMEOUT_SECONDS=5
+TWIN_TICK_HZ=0.2
+```
+
+The seeded coordinates and incidents are **demo data**. They must not be represented as a live emergency feed.
 
 ## Testing
 
+Backend tests can be run without external providers:
+
 ```powershell
 Push-Location backend
-python -m pytest app/algorithms/test_astar.py app/services/test_decision_components.py
-Pop-Location
-Push-Location frontend
-npm run build
+$env:PYTHONPATH='.'
+python -m pytest -q
 Pop-Location
 ```
 
-Tests cover graph alternatives, prediction intervals, evidence-grounded diagnosis, action generation and policy selection. Integration smoke tests should exercise the HTTP flow from telemetry/situation through decision, trace, approval and outcome.
+The suite covers:
 
-## Evaluation and Research Direction
+- optimality of the deterministic A* fixture
+- distinct K-route generation
+- counterfactual action generation
+- policy selection
+- provider fallback behaviour
+- Google Routes response normalization
 
-The data model and service boundaries support measuring response time, ETA error, delay reduction, unnecessary reroutes, backup dispatch frequency, fleet coverage, resource utilization, decision latency, action success and calibration. No benchmark numbers are claimed.
+Frontend type checking:
 
-Relevant foundations include HMM-style map matching, graph-based traffic forecasting, trajectory ETA prediction, uncertainty-aware routing, spatial retrieval, grounded agents and emergency-response simulation. These are prior or planned foundations, not claims of novelty by this project.
+```powershell
+Push-Location frontend
+npx tsc --noEmit
+Pop-Location
+```
 
-## Roadmap and Limitations
+A production build requires a normal platform-specific `npm install`; the repository intentionally does not depend on the shipped Windows/Linux `node_modules` directory.
 
-**Implemented:** modular decision path, deterministic baselines, evidence and uncertainty objects, distinct route candidates, fleet trade-offs, restricted agent tools, persistence, human approval and frontend compatibility.
+## ML / DL / RL status
 
-**In progress:** richer road-network data, time-stepped simulation, external traffic adapters, migrations and broader integration tests.
+Current decision path:
 
-**Future research:** trained ML/DL predictors, validated visual road evidence, RL/optimization policies, PostGIS spatial persistence, calibration studies and real-world deployment validation.
+- transparent heuristic ETA baseline
+- deterministic evidence fusion
+- provider-backed route candidates
+- incident-proximity route risk
+- uncertainty interval
+- deterministic counterfactual evaluation
+- rule-based safety-first policy
 
-The demo traffic and incidents are synthetic. External feeds, hospital capacity, model availability and production authentication are not provided by this repository. The system must remain human-in-the-loop.
+There is **no fake trained ML/RL model** in the operational path. Trained ETA forecasting, causal traffic prediction, computer-vision road evidence, RL/optimization dispatch policies and calibration studies remain future research layers behind the existing service interfaces.
+
+## Design principle
+
+GeoAgentic is not trying to replace Google Maps, Traccar or a dispatcher.
+
+It sits above those systems:
+
+> **Observe → Diagnose → Predict → Generate Actions → Evaluate Counterfactuals → Recommend → Explain → Human Decision → Learn from Outcome**
+
+That is the product boundary.
+
+
+## Local Emergency Operations Features
+
+The local control plane includes five operator-facing emergency features:
+
+- **Smart Green Corridor:** route-linked signal-priority simulation with animated green corridor geometry and intersection status. The current local controller is explicitly synthetic; it does not claim to control physical traffic lights.
+- **AI Voice Emergency Assistant:** browser-native `SpeechSynthesis` announcements with a 30-second message deduplication window and a header toggle.
+- **Live Mumbai Map:** CARTO Dark Matter basemap, Mumbai boundary overlay, animated ambulance movement, fleet markers, incidents, hospitals, signal markers, route alternatives and emergency/corridor overlays.
+- **Smart Hospital Alerts:** immediate dispatch alert plus an en-route alert workflow; hospital readiness exposes ICU, ER, oxygen and trauma status. Local hospital capacity is deterministic synthetic demo data.
+- **AI Dispatch Engine:** nearest available ambulance + hospital selection, response estimate, survival-response model simulation and dispatch-confidence estimate. These local values are explicitly labelled as a deterministic decision-model simulation, not a trained clinical/neural model.
+
+These features are intended for the local company-ready demonstration/control plane. Physical traffic-signal control, real hospital integration, and clinical survival prediction require authenticated external systems and validation before any real-world deployment.
+
+## Mountain Air Rescue
+
+The local control plane now includes a dedicated **Mountain Air Rescue Desk** for emergencies where altitude, terrain and constrained road access make a ground-only response insufficient.
+
+The local simulation evaluates:
+
+- Himalayan response regions: Himachal Pradesh, Uttarakhand and Ladakh
+- air-ambulance availability, crew, fuel and range
+- incident altitude and terrain risk
+- wind, visibility and cloud-base conditions
+- primary and alternate landing-zone feasibility
+- trauma-hospital helipad and ICU readiness
+- flight ETA and landing feasibility
+- explicit operational constraints and human-review status
+
+The interface provides a mountain situation map, flight path, landing zones, trauma destination and an **Execute AI Air Rescue** control. Aviation values are simulation data; this module does not control aircraft, air traffic or real helipads.
+
+## Home page hero
+
+The command-center home view uses the supplied ambulance image as the primary emergency-response visual and links the urban ground-response workflow directly to the Mountain Air Rescue Desk.

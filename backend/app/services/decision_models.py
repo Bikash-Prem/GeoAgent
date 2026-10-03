@@ -149,6 +149,6 @@ class DecisionResult:
             "reasoning": self.reason,
             "requires_human_approval": True,
             "created_at": datetime.utcnow().isoformat(),
-            "model_versions": {"eta": "heuristic-1.0", "policy": self.policy_version},
+            "model_versions": {"eta": self.recommendation.eta.model_name + "-" + self.recommendation.eta.model_version, "policy": self.policy_version},
             "situation": self.situation.as_dict(),
         }
